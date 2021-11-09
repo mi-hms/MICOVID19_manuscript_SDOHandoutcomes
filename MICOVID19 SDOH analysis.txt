@@ -1,0 +1,282 @@
+*do "T:\IntMed-HospMed\HMS data\pgms\Megan OMalley\Covid\Social determinants of health\Projects\Renu-VC SDOH manuscript\Stata Analysis\ACS Income clean.do"
+*do "T:\IntMed-HospMed\HMS data\pgms\Megan OMalley\Covid\Social determinants of health\Projects\Renu-VC SDOH manuscript\Stata Analysis\USDA clean.do"
+clear all
+
+
+use "xxxxx\Stata Analysis\covid_data_01_06_2021v2.dta", clear
+
+
+
+*********************************************************************************
+**********************Exclusion/Inclusion Criteria*******************************
+*********************************************************************************
+*Include all patients who received treatment at a HMS affiliated hospital with a positive COVID test and a discharge diagnosis of COVID-19.
+
+*Exclude patients who were included in the MICOVID database, but tested negative for COVID-19 or were discharged with an unconfirmed diagnosis of COVID-19. We will also exclude any non-Michigan resident from our analysis.
+
+*Excluding non-Michigan residents and those with missing zip codes
+
+drop if missing(zip_cd_5)
+
+tab state
+drop if state!="MI"
+
+
+*excluding those with negative COVID test
+*Need to clarify from Megan which variable to use covid_result or covid_status?
+*This is already excluded
+
+codebook zip_cd_5
+tab zip_cd_5
+
+
+
+
+
+*********************************************************************************
+**************************Clinical Outcome Variables*****************************
+*********************************************************************************
+
+
+*Final discharge destination
+codebook dischargedispo_547147
+groups dischargedispo_547147
+
+gen discharge_disp=.
+replace discharge_disp=1 if dischargedispo_547147=="Discharged home"
+replace discharge_disp=1 if dischargedispo_547147=="Discharged to a temporary shelter (hotel, dorm, etc.)"
+replace discharge_disp=1 if dischargedispo_547147=="Discharged to correctional facility"
+replace discharge_disp=2 if dischargedispo_547147=="Discharged to a skilled nursing facility"
+replace discharge_disp=2 if dischargedispo_547147=="Discharged to a custodial nursing home"
+replace discharge_disp=2 if dischargedispo_547147=="Discharged to an assisted living facility"
+replace discharge_disp=3 if dischargedispo_547147=="Discharged to a long term acute care hospital (LTAC)"
+replace discharge_disp=3 if dischargedispo_547147=="Discharged to inpatient psychiatric facility"
+replace discharge_disp=3 if dischargedispo_547147=="Discharged to inpatient rehab"
+replace discharge_disp=3 if dischargedispo_547147=="Discharged to sub acute rehab facility"
+replace discharge_disp=4 if dischargedispo_547147=="Discharged to home hospice"
+replace discharge_disp=4 if dischargedispo_547147=="Discharged to inpatient hospice"
+label define discharge_disp 1 "home/temp shelter/correctional facility" 2 "SNF/nursing home/assisted living" 3 "LTAC/IPpsych/rehab" 4 "hospice"
+label values discharge_disp "discharge_disp"
+groups discharge_disp
+recode discharge_disp (1=1) (2/4=0), gen(dischargetohome)
+*need advise from Renu on how to group this variable
+
+*Death - 60 day mortality
+codebook death
+tab death
+
+*COVID severity
+/*severe – severe illness
+* if ever_highflow = 1 
+* or ever_noninvas = 1
+* or ever_mechanical = 1
+* or dialysis = 1
+* or vasopressor = 1
+* or confirmed_deceased = 1
+* then severe=1;
+* else severe=0;
+*/
+codebook severe
+tab severe
+
+*Mechanical ventilation
+codebook ever_mechanical
+
+*Organ Dysfunction
+codebook only_moderate
+
+*ICU stays
+codebook ever_icu los_icu
+tab hosp ever_icu, row
+
+
+*********************************************************************************
+******************************SVI index******************************************
+*********************************************************************************
+*recoding by multiplying with 10
+gen rpl_theme1_w_r=rpl_theme1_w*10
+gen rpl_theme2_w_r=rpl_theme2_w*10
+gen rpl_theme3_w_r=rpl_theme3_w*10
+gen rpl_theme4_w_r=rpl_theme4_w*10
+gen rpl_themes_w_r=rpl_themes_w*10
+
+*converting to quartiles
+xtile rpl_theme1_w_r_q=rpl_theme1_w_r, nq(4)
+xtile rpl_theme2_w_r_q=rpl_theme2_w_r, nq(4)
+xtile rpl_theme3_w_r_q=rpl_theme3_w_r, nq(4)
+xtile rpl_theme4_w_r_q=rpl_theme4_w_r, nq(4)
+xtile rpl_themes_w_r_q=rpl_themes_w_r, nq(4)
+
+
+
+*********************************************************************************
+*********************************Covariates**************************************
+*********************************************************************************
+
+*Other patient factors: Age, sex, insurance, ambulatory arrival, comorbidity, race
+*age
+codebook age 
+univar age
+*hist age
+recode age (0/64.99=0 "<65") (65/max=1 ">=65"), gen(age_gte65)
+
+*sex
+codebook male
+tab male
+
+*insurance
+codebook medicaid medicare selfpay commercial payer_other
+gen insurance=.
+replace insurance=1 if commercial==1
+replace insurance=2 if medicare==1
+replace insurance=3 if medicaid==1
+replace insurance=4 if selfpay==1
+replace insurance=4 if payer_other==1
+
+label define insurance 1"commercial" 2"medicare" 3"medicaid" 4"selfpay/other" 
+label values insurance "insurance"
+tab insurance
+
+
+*RACE
+codebook race_1 race_2 race_3 race_5 race_6 race_7 race_other eth_1 eth_2 eth_3
+gen race_ethnicity=.
+replace race_ethnicity=1 if race_6==1 & eth_1!=1
+replace race_ethnicity=2 if race_2==1 & eth_1!=1
+replace race_ethnicity=3 if eth_1==1
+replace race_ethnicity=4 if race_1==1 |race_3==1 | race_7==1 |race_other==1 
+tab race_ethnicity
+recode race_ethnicity (1=0 "White NH") (2=2 "Black NH") (3/4=3 "other"), gen(race_ethnicityx)
+tab race_ethnicityx, gen(race_ethnicityx)
+label define race_ethnicity 1 "White NH" 2 "Black NH" 3 "Hispanic" 4 "Other"
+label variable race_ethnicity race_ethnicity
+
+*comorbidity
+codebook charlson
+tab charlson
+univar charlson
+*hist charlson
+
+*month of admission
+codebook hosp_enc_date
+list hosp_enc_date in 1/10
+gen monthofadmission=month(hosp_enc_date)
+list monthofadmission hosp_enc_date in 1/10
+tab monthofadmission
+
+recode monthofadmission (3/5=1 "mar-may") (6/8=2 "jun-aug") (9/12=3 "sep-dec"), gen(month)
+tab month, gen(monthx)
+
+*generatng highest SVI vs bottom 3 SVI quartile
+gen svi_highestq=.
+replace svi_highestq=0 if rpl_themes_w_r_q<4
+replace svi_highestq=1 if rpl_themes_w_r_q==4
+
+gen svi_highvslowq=.
+replace svi_highvslowq=0 if rpl_themes_w_r_q==1
+replace svi_highvslowq=1 if rpl_themes_w_r_q==4
+
+
+*********************************************************************************
+***************************Correlation among outcomes****************************
+*********************************************************************************
+pwcorr only_moderate severe ever_mechanical ever_icu end_death dischargetohome
+
+*********************************************************************************
+*************************Hospital specific SVI variables*************************
+*********************************************************************************
+*generating hospital specific SVI means
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+    bysort hosp: egen `var'_hmean = mean(`var')
+}
+
+*********************************************************************************
+*************************Excluding transfer patients*****************************
+*********************************************************************************
+*********************************************************************************
+*********************************************************************************
+***************************Re-centering SVI variables****************************
+*********************************************************************************
+*generating hospital specific SVI means
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+    bysort hosp: egen `var'_hmeannot = mean(`var') if admissionsource_496257!="Transfer from Another Hospital"
+}
+
+bysort hosp: tabstat rpl_theme1_w_r rpl_theme1_w_r_hmean rpl_theme2_w_r rpl_theme2_w_r_hmean rpl_theme3_w_r rpl_theme3_w_r_hmean rpl_theme4_w_r rpl_theme4_w_r_hmean rpl_themes_w_r rpl_themes_w_r_hmean if admissionsource_496257!="Transfer from Another Hospital", statistics(mean sum n)
+
+	
+*********************************************************************************
+*************************Excluding hospitals with <25 patients*******************
+*************************   Including extra covariates        *******************
+*********************************************************************************
+
+*Hospital volume
+gen n=1
+egen hosp_vol=count(n), by (hosp)
+sort hosp_vol
+tab hosp
+tabstat hosp_vol, stat(mean) by(hosp)
+
+gen hosp_exclude = 0
+replace hosp_exclude = 1 if hosp_vol<25
+
+*********************************************************************************
+***************************Multivariable Analyses********************************
+***************************Equation 2********************************************
+*********************************************************************************
+
+/* Encode the respiratory rate and POR variables for use in model */
+encode rrrange_496257, gen(rrrange)
+replace rrrange = . if rrrange_496257 == "Not available"
+encode porange_496257, gen(porange)
+replace porange = . if porange_496257 == "Not available"
+
+eststo clear
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 || hosp:		
+}
+
+esttab using "xxxxx\Output\mainmodel_multiplereg_norace_nohosplessthan25_extrapatientvars_nocreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+
+
+eststo clear
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 if hosp_exclude == 0 || hosp:
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:		
+}
+
+esttab using "xxxxx\Output\sensitivity_multiplereg_norace_nohosplessthan25_extrapatientvars_withcreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+
+eststo clear
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+	eststo: melogit only_moderate `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
+	eststo: melogit severe `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
+	eststo: melogit ever_mechanical `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
+	eststo: melogit ever_icu `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
+	eststo: melogit end_death `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
+	eststo: melogit dischargetohome `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:		
+}
+
+	esttab using "xxxxx\Output\sensitivity_multiplereg_nohosplessthan25_notransfer_extrapatientvars_nocreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+	
+	
+eststo clear
+foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  || hosp:
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:		
+}
+
+esttab using "xxxxx\Output\sensitivity_multiplereg_norace_fullsample_extrapatientvars_withcreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
