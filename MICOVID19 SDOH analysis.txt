@@ -178,15 +178,10 @@ replace svi_highvslowq=1 if rpl_themes_w_r_q==4
 
 
 *********************************************************************************
-***************************Correlation among outcomes****************************
-*********************************************************************************
-pwcorr only_moderate severe ever_mechanical ever_icu end_death dischargetohome
-
-*********************************************************************************
 *************************Hospital specific SVI variables*************************
 *********************************************************************************
 *generating hospital specific SVI means
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
     bysort hosp: egen `var'_hmean = mean(`var')
 }
 
@@ -198,12 +193,9 @@ foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_
 ***************************Re-centering SVI variables****************************
 *********************************************************************************
 *generating hospital specific SVI means
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
     bysort hosp: egen `var'_hmeannot = mean(`var') if admissionsource_496257!="Transfer from Another Hospital"
 }
-
-bysort hosp: tabstat rpl_theme1_w_r rpl_theme1_w_r_hmean rpl_theme2_w_r rpl_theme2_w_r_hmean rpl_theme3_w_r rpl_theme3_w_r_hmean rpl_theme4_w_r rpl_theme4_w_r_hmean rpl_themes_w_r rpl_themes_w_r_hmean if admissionsource_496257!="Transfer from Another Hospital", statistics(mean sum n)
-
 	
 *********************************************************************************
 *************************Excluding hospitals with <25 patients*******************
@@ -220,63 +212,1088 @@ tabstat hosp_vol, stat(mean) by(hosp)
 gen hosp_exclude = 0
 replace hosp_exclude = 1 if hosp_vol<25
 
+
 *********************************************************************************
 ***************************Multivariable Analyses********************************
-***************************Equation 2********************************************
+***************************Main Specification************************************
 *********************************************************************************
 
-/* Encode the respiratory rate and POR variables for use in model */
-encode rrrange_496257, gen(rrrange)
-replace rrrange = . if rrrange_496257 == "Not available"
-encode porange_496257, gen(porange)
-replace porange = . if porange_496257 == "Not available"
+log using mainmodel_patient_25percentincrease.log, replace
+
+asdoc, row(SDOH category, Estimate Type, Organ dysfunction, LL, UL, pval, Organ failure, LL, UL, pval, Mechanical ventilation, LL, UL, pval, ICU Stay, LL, UL, pval, Death, LL, UL, pval, Discharge to home, LL, UL, pval) replace save(MainModelOutput_25percent_12_23_2021.doc)
 
 eststo clear
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
-	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
-	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
-	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
-	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
-	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:
-	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 || hosp:		
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var', Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(MainModelOutput_25percent_12_23_2021.doc)
+	
+	asdoc, row(`var', Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(MainModelOutput_25percent_12_23_2021.doc)
+
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
 }
 
-esttab using "xxxxx\Output\mainmodel_multiplereg_norace_nohosplessthan25_extrapatientvars_nocreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+log close 
+	
 
+
+log using mainmodel_hospital25percentincrease.log, replace
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var'_hmean, Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(MainModelOutput_25percent_12_23_2021.doc)
+	
+	asdoc, row(`var'_hmean, Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(MainModelOutput_25percent_12_23_2021.doc)
+	
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
+}
+
+log close 
+	
+
+*********************************************************************************
+***************************Multivariable Analyses********************************
+************************ Sensitivity - No transfers *****************************
+*********************************************************************************
+
+log using sensitivity_notransfer.log, replace
+asdoc, row(SDOH category, Estimate Type, Organ dysfunction, LL, UL, pval, Organ failure, LL, UL, pval, Mechanical ventilation, LL, UL, pval, ICU Stay, LL, UL, pval, Death, LL, UL, pval, Discharge to home, LL, UL, pval) replace save(SensitivitynotransferOutput_12_20_2021.doc)
 
 eststo clear
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
-	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 if hosp_exclude == 0 || hosp:
-	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
-	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
-	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
-	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:
-	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  if hosp_exclude == 0 || hosp:		
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var'_hmean, Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivitynotransferOutput_12_20_2021.doc)
+	
+	asdoc, row(`var'_hmean, Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivitynotransferOutput_12_20_2021.doc)
+
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
 }
 
-esttab using "xxxxx\Output\sensitivity_multiplereg_norace_nohosplessthan25_extrapatientvars_withcreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmeannot= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var'_hmeannot, Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivitynotransferOutput_12_20_2021.doc)
+	
+	asdoc, row(`var'_hmeannot, Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivitynotransferOutput_12_20_2021.doc)
+	
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
+}
+
+
+log close 
+
+
+
+*********************************************************************************
+***************************Multivariable Analyses********************************
+************************ Sensitivity - All patients *****************************
+*********************************************************************************
+
+log using sensitivity_allpatients.log, replace
+asdoc, row(SDOH category, Estimate Type, Organ dysfunction, LL, UL, pval, Organ failure, LL, UL, pval, Mechanical ventilation, LL, UL, pval, ICU Stay, LL, UL, pval, Death, LL, UL, pval, Discharge to home, LL, UL, pval) replace save(SensitivityallpatientsOutput_12_20_2021.doc)
 
 eststo clear
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
-	eststo: melogit only_moderate `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
-	eststo: melogit severe `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
-	eststo: melogit ever_mechanical `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
-	eststo: melogit ever_icu `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
-	eststo: melogit end_death `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:
-	eststo: melogit dischargetohome `var' `var'_hmeannot i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 & admissionsource_496257!="Transfer from Another Hospital" || hosp:		
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  || hosp:, intpoints(14) or
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var', Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivityallpatientsOutput_12_20_2021.doc)
+	
+	asdoc, row(`var', Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivityallpatientsOutput_12_20_2021.doc)
+
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
 }
 
-	esttab using "xxxxx\Output\sensitivity_multiplereg_nohosplessthan25_notransfer_extrapatientvars_nocreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  || hosp:, intpoints(14) or
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var'_hmean, Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivityallpatientsOutput_12_20_2021.doc)
+	
+	asdoc, row(`var'_hmean, Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivityallpatientsOutput_12_20_2021.doc)
+	
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
+}
+
+log close 
+
+
+*********************************************************************************
+***************************Multivariable Analyses********************************
+************************ Sensitivity - Population Average ***********************
+*********************************************************************************
+xtset nid
+
+asdoc, row(SDOH category, Estimate Type, Organ dysfunction, LL, UL, pval, Organ failure, LL, UL, pval, Mechanical ventilation, LL, UL, pval, ICU Stay, LL, UL, pval, Death, LL, UL, pval, Discharge to home, LL, UL, pval) replace save(SensitivitypopulationaverageOutput_12_20_2021.doc)
+
+eststo clear
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: xtlogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: xtlogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: xtlogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: xtlogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: xtlogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: xtlogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var', Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivitypopulationaverageOutput_12_20_2021.doc)
+	
+	asdoc, row(`var', Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivitypopulationaverageOutput_12_20_2021.doc)
+
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
+}
+
+
+foreach var in "rpl_theme1_w" "rpl_theme2_w" "rpl_theme3_w" "rpl_theme4_w" "rpl_themes_w" {
+	di""
+	di""
+	di "*********`var'**********"
+	eststo: xtlogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	
+	matrix list r(b)
+	matrix A = r(table)
+	matrix list A
+	loc A1 = A[1,1]
+	loc LL1 = A[5,1]
+	loc UL1 = A[6,1]
+	loc pval1 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B1 = r(estimate)
+	loc lb1 = r(lb)
+	loc ub1 = r(ub)
+	loc p1 = r(p)
+	
+	eststo: xtlogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A2 = A[1,1]
+	loc LL2 = A[5,1]
+	loc UL2 = A[6,1]
+	loc pval2 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B2 = r(estimate)
+	loc lb2 = r(lb)
+	loc ub2 = r(ub)
+	loc p2 = r(p)
+	
+	eststo: xtlogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A3 = A[1,1]
+	loc LL3 = A[5,1]
+	loc UL3 = A[6,1]
+	loc pval3 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B3 = r(estimate)
+	loc lb3 = r(lb)
+	loc ub3 = r(ub)
+	loc p3 = r(p)
+	
+	eststo: xtlogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A4 = A[1,1]
+	loc LL4 = A[5,1]
+	loc UL4 = A[6,1]
+	loc pval4 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B4 = r(estimate)
+	loc lb4 = r(lb)
+	loc ub4 = r(ub)
+	loc p4 = r(p)
+	
+	eststo: xtlogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A5 = A[1,1]
+	loc LL5 = A[5,1]
+	loc UL5 = A[6,1]
+	loc pval5 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B5 = r(estimate)
+	loc lb5 = r(lb)
+	loc ub5 = r(ub)
+	loc p5 = r(p)
+	
+	eststo: xtlogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange  if hosp_exclude == 0 , or vce(cluster hosp)
+	
+	margins, at(`var'_hmean= (0.5 0.75)) post expression(predict()*100)
+	matrix A = r(table)
+	matrix list A
+	loc A6 = A[1,1]
+	loc LL6 = A[5,1]
+	loc UL6 = A[6,1]
+	loc pval6 = A[4,1]
+	matrix drop A
+	
+	lincom 2._at - 1._at
+	loc B6 = r(estimate)
+	loc lb6 = r(lb)
+	loc ub6 = r(ub)
+	loc p6 = r(p)
+	
+	asdoc, row(`var'_hmean, Absolute risk , `A1', `LL1', `UL1',`pval1', `A2', `LL2', `UL2', `pval2', `A3', `LL3', `UL3', `pval3', `A4', `LL4', `UL4', `pval4', `A5', `LL5', `UL5', `pval5', `A6', `LL6', `UL6', `pval6',) append save(SensitivitypopulationaverageOutput_12_20_2021.doc)
+	
+	asdoc, row(`var'_hmean, Change in risk , `B1', `lb1', `ub1', `p1', `B2', `lb2', `ub2', `p2', `B3', `lb3', `ub3', `p3', `B4', `lb4', `ub4', `p4', `B5', `lb5', `ub5', `p5', `B6', `lb6', `ub6', `p6') append save(SensitivitypopulationaverageOutput_12_20_2021.doc)
+	
+	macro drop A1 A2 A3 A4 A5 A6 LL1 LL2 LL3 LL4 LL5 LL6 UL1 UL2 UL3 UL4 UL5 UL6 B1 B2 B3 B4 B5 B6 lb1 lb2 lb3 lb4 lb5 lb6 ub1 ub2 ub3 ub4 ub5 ub6
+
+}
+
+*********************************************************************************
+*************************** Sensitivity Analyses ********************************
+*************************** E-value calculation *********************************
+*********************************************************************************
+
+	melogit only_moderate rpl_themes_w rpl_themes_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	macro drop est lcl ucl
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit severe rpl_themes_w rpl_themes_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
 	
 	
-eststo clear
-foreach var in "rpl_theme1_w_r" "rpl_theme2_w_r" "rpl_theme3_w_r" "rpl_theme4_w_r" "rpl_themes_w_r" {
-	eststo: melogit only_moderate `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
-	eststo: melogit severe `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1  || hosp:
-	eststo: melogit ever_mechanical `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
-	eststo: melogit ever_icu `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
-	eststo: melogit end_death `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:
-	eststo: melogit dischargetohome `var' `var'_hmean i.month age male charlson i.rrrange i.porange creatininehigh_day1 || hosp:		
-}
-
-esttab using "xxxxx\Output\sensitivity_multiplereg_norace_fullsample_extrapatientvars_withcreatinine.csv", plain b(2) eform ci(2) wide compress star replace depvars
+	melogit ever_mechanical rpl_themes_w rpl_themes_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit severe rpl_theme1_w rpl_theme1_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit ever_mechanical rpl_theme1_w rpl_theme1_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit only_moderate rpl_theme2_w rpl_theme2_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit severe rpl_theme2_w rpl_theme2_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+	macro drop est lcl ucl
+	matrix drop result
+	
+	melogit severe rpl_theme3_w rpl_theme3_w_hmean i.month age male charlson i.rrrange i.porange if hosp_exclude == 0 || hosp:, intpoints(14) or
+	mat result = r(table)
+	local est = result[1,1]
+	display `est'
+	local lcl = result[5,1]
+	display `lcl'
+	local ucl = result[6,1]
+	display `ucl'
+	evalue or `est', lcl(`lcl') ucl(`ucl')
+	evalue or `est', lcl(`lcl') ucl(`ucl') common
+	
+// 	use "common" option for all results with % over 15%
+	
